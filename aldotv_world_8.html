@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>TV Mondiale</title>
+  <style>
+    body { display: flex; margin: 0; height: 100vh; font-family: sans-serif; }
+    #sidebar { width: 260px; background: #f7f7f7; overflow: auto; padding: 10px; border-right: 1px solid #ccc; }
+    #searchCountry { width: 100%; padding: 5px; margin-bottom: 5px; }
+    .region { margin-bottom: 10px; }
+    .region h4 { margin: 0; padding: 5px; background: #ddd; cursor: pointer; }
+    .countries { display: none; padding-left: 10px; }
+    .region.open .countries { display: block; }
+    .country-btn {
+      display: flex; align-items: center; padding: 5px;
+      border: none; background: none; cursor: pointer;
+      width: 100%; text-align: left;
+    }
+    .country-btn.active { background: #e0e0e0; }
+    .country-btn img { width: 20px; height: 15px; margin-right: 5px; }
+
+    #favorites { border-top: 1px solid #aaa; margin-top: 10px; padding-top: 5px; }
+    #favorites h4 { margin: 5px 0; }
+    .fav-btn {
+      display: flex; align-items: center; padding: 5px;
+      border: none; background: none; cursor: pointer;
+      width: 100%; text-align: left;
+    }
+    .fav-btn img { width: 20px; height: 15px; margin-right: 5px; }
+
+    #channels { width: 300px; overflow: auto; background: #fafafa; padding: 10px; }
+    #searchChannel { width: 100%; padding: 5px; margin-bottom: 5px; }
+    .channel {
+      display: flex; align-items: center; padding: 5px;
+      cursor: pointer; margin-bottom: 5px;
+    }
+    .channel img { width: 40px; height: 40px; margin-right: 8px; object-fit: contain; }
+    .channel.selected { background: #e0f0ff; }
+
+    #player { flex: 1; background: black; display: flex; align-items: center; justify-content: center; }
+    video { width: 100%; max-height: 95vh; }
+  </style>
+</head>
+<body>
+
+<div id="sidebar">
+  <input id="searchCountry" placeholder="🔍 Cerca Paesi...">
+  <div id="regions">Caricamento regioni e paesi…</div>
+  <div id="favorites"><h4>⭐ Preferiti</h4><div id="favList">Nessun preferito</div></div>
+</div>
+
+<div id="channels">
+  <input id="searchChannel" placeholder="🔍 Cerca Canali...">
+  <div id="channelList">Seleziona un paese</div>
+</div>
+
+<div id="player"><video id="tvPlayer" controls autoplay></video></div>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script>
+const countryNameMap = {};
+const favorites = JSON.parse(localStorage.getItem('tv_favs')) || [];
+let currentChannels = [];
+let currentCountryCode = '';
+
+async function init() {
+  const countries = await fetch('https://iptv-org.github.io/api/countries.json').then(r => r.json());
+  countries.forEach(c => countryNameMap[c.code] = c.name);
+
+  const regions = await fetch('https://iptv-org.github.io/api/regions.json').then(r => r.json());
+  const regionsDiv = document.getElementById('regions');
+  regionsDiv.innerHTML = '';
+
+  regions.forEach(region => {
+    const div = document.createElement('div');
+    div.className = 'region';
+    div.innerHTML = `<h4>${region.name} ⯈</h4><div class="countries"></div>`;
+    const countriesDiv = div.querySelector('.countries');
+
+    region.countries.forEach(code => {
+      const name = countryNameMap[code] || code;
+      const btn = document.createElement('button');
+      btn.className = 'country-btn';
+      btn.setAttribute('data-code', code);
+      btn.innerHTML = `<img src="https://flagcdn.com/16x12/${code.toLowerCase()}.png"> ${name} (${code})`;
+      btn.onclick = () => {
+        if (!btn.classList.contains('active')) selectCountry(code, btn);
+      };
+      countriesDiv.appendChild(btn);
+    });
+
+    div.querySelector('h4').onclick = () => div.classList.toggle('open');
+    regionsDiv.appendChild(div);
+  });
+
+  document.getElementById('searchCountry').oninput = () => filterCountries();
+  document.getElementById('searchChannel').oninput = () => renderChannels(currentChannels);
+  updateFavorites();
+}
+init();
+
+function filterCountries() {
+  const term = document.getElementById('searchCountry').value.toLowerCase();
+  document.querySelectorAll('.region').forEach(region => {
+    let anyVisible = false;
+    region.querySelectorAll('.country-btn').forEach(btn => {
+      const match = btn.textContent.toLowerCase().includes(term);
+      btn.style.display = match ? 'flex' : 'none';
+      if (match) anyVisible = true;
+    });
+    region.classList.toggle('open', anyVisible);
+  });
+}
+
+async function selectCountry(code, btn) {
+  currentCountryCode = code;
+  document.querySelectorAll('.country-btn').forEach(b => {
+    if (b.dataset.code === code) b.classList.add('active');
+    else b.classList.remove('active');
+  });
+
+  document.getElementById('channelList').innerHTML = 'Caricamento canali…';
+  const text = await fetch(`https://iptv-org.github.io/iptv/countries/${code.toLowerCase()}.m3u`).then(r => r.text());
+  const lines = text.split('\n');
+  const list = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith('#EXTINF')) {
+      const title = lines[i].split(',')[1]?.trim();
+      const logo = (lines[i].match(/tvg-logo="([^"]+)"/) || [])[1] || '';
+      const url = lines[i + 1]?.trim();
+      if (url) list.push({ title, logo, url });
+    }
+  }
+
+  currentChannels = list;
+  renderChannels(list);
+}
+
+function renderChannels(list) {
+  const term = document.getElementById('searchChannel').value.toLowerCase();
+  const container = document.getElementById('channelList');
+  container.innerHTML = '';
+  list.filter(ch => ch.title.toLowerCase().includes(term)).forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'channel';
+    div.innerHTML = `${c.logo ? `<img src="${c.logo}">` : ''}<span>${c.title}</span>`;
+    div.onclick = () => selectChannel(div, c);
+    container.appendChild(div);
+  });
+}
+
+function selectChannel(el, c) {
+  document.querySelectorAll('.channel').forEach(d => d.classList.remove('selected'));
+  el.classList.add('selected');
+  play(c.url);
+}
+
+function play(url) {
+  const dl = document.getElementById('tvPlayer');
+  if (Hls.isSupported()) {
+    const hls = new Hls();
+    hls.loadSource(url);
+    hls.attachMedia(dl);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => dl.play());
+  } else if (dl.canPlayType('application/vnd.apple.mpegurl')) {
+    dl.src = url;
+    dl.play();
+  } else {
+    alert("Browser non compatibile HLS");
+  }
+}
+
+function updateFavorites() {
+  const favDiv = document.getElementById('favList');
+  favDiv.innerHTML = '';
+  if (favorites.length === 0) {
+    favDiv.textContent = 'Nessun preferito';
+    return;
+  }
+
+  favorites.forEach(code => {
+    const name = countryNameMap[code] || code;
+    const btn = document.createElement('button');
+    btn.className = 'fav-btn';
+    btn.innerHTML = `<img src="https://flagcdn.com/16x12/${code.toLowerCase()}.png"> ${name} (${code})`;
+    btn.onclick = () => {
+      document.querySelectorAll(`.country-btn[data-code="${code}"]`).forEach(b => b.click());
+    };
+    favDiv.appendChild(btn);
+  });
+}
+</script>
+</body>
+</html>
