@@ -53,9 +53,6 @@ let currentChannels = [], currentCountryCode='';
 async function init(){
   const countries = await fetch('https://iptv-org.github.io/api/countries.json').then(r=>r.json());
   countries.forEach(c=>countryNameMap[c.code]=c.name);
-  //
-  const code = c.country.toLowerCase() === 'uk' ? 'gb' : c.country.toLowerCase();
-  //
   const regions = await fetch('https://iptv-org.github.io/api/regions.json').then(r=>r.json());
   const regionsDiv = document.getElementById('regions');
   regionsDiv.innerHTML='';
