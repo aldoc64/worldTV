@@ -65,7 +65,8 @@ async function init(){
       const name = countryNameMap[code]||code;
       const btn = document.createElement('button'); btn.className='country-btn';
       btn.dataset.code=code;
-      btn.innerHTML=`<img src="https://flagcdn.com/16x12/${code.toLowerCase()}.png"> ${name} (${code})`;
+      const fixedCode = code.toLowerCase() === 'uk' ? 'gb' : code.toLowerCase();
+      btn.innerHTML = `<img src="https://flagcdn.com/16x12/${fixedCode}.png"> ${name} (${code})`;
       btn.onclick=()=>selectCountry(code, btn);
       countriesDiv.appendChild(btn);
     });
