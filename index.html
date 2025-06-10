@@ -261,14 +261,14 @@ function playChannel(c){
     hls.on(Hls.Events.MANIFEST_PARSED,()=>dl.play());
   } else if(dl.canPlayType('application/vnd.apple.mpegurl')){
     dl.src=c.url;dl.play();
-  } else alert("HLS non supportato");
+  } else alert("HLS not supported");
 }
 
 function loadFavoritesUI(){
   const favListDiv = document.getElementById('favList');
   favListDiv.innerHTML='';
   const validFavs = favorites.filter(f => f && f.title && f.url);
-  if(!validFavs.length){ favListDiv.textContent='Nessuno'; return; }
+  if(!validFavs.length){ favListDiv.textContent='Nothing'; return; }
   validFavs.forEach(c => {
     const favChannel = { ...c, fromFavorites: true };
     const div = makeChannelEl(favChannel);
